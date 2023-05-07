@@ -2,39 +2,8 @@ import numpy as np
 import cv2
 import os
 
-def RectifyMaps(binocular_camera):
-    rec_rvecs_l, rec_rvecs_r, rec_tvecs_l, rec_tvecs_r, Q, validPixROI1,validPixROI2 = \
-        cv2.stereoRectify(binocular_camera.camMat_l, binocular_camera.dist_l, binocular_camera.camMat_r, binocular_camera.dist_r,
-                          binocular_camera.img_size[:2], binocular_camera.rvecs, binocular_camera.tvecs, alpha=0)
-        
-    l_map1, l_map2 = cv2.initUndistortRectifyMap(binocular_camera.camMat_l, binocular_camera.dist_l, rec_rvecs_l, rec_tvecs_l,
-                                              binocular_camera.img_size[:2], cv2.CV_16SC2)
-    r_map1, r_map2 = cv2.initUndistortRectifyMap(binocular_camera.camMat_r, binocular_camera.dist_r, rec_rvecs_r, rec_tvecs_r,
-                                              binocular_camera.img_size[:2], cv2.CV_16SC2)
-    
-    return l_map1, l_map2, r_map1, r_map2, Q
 
-def Image_Rectify(binocular_camera, img_l_dir, img_r_dir):
-    img_l = cv2.imread(img_l_dir, binocular_camera.l_type)
-    img_r = cv2.imread(img_r_dir, binocular_camera.r_type)
-
-    img_l = cv2.undistort(img_l, binocular_camera.camMat_l, binocular_camera.dist_l)
-    img_r = cv2.undistort(img_r, binocular_camera.camMat_r, binocular_camera.dist_r)
-
-    rectified_img_l = cv2.remap(img_l, binocular_camera.l_map1, binocular_camera.l_map2, cv2.INTER_AREA)
-    rectified_img_r = cv2.remap(img_r, binocular_camera.r_map1, binocular_camera.r_map2, cv2.INTER_AREA)
-
-    return rectified_img_l, rectified_img_r
-
-def depth(binocular_camera, points_l, points_r):
-    disp_img = np.zeros(binocular_camera.img_size, dtype=np.float32)
-    for point_l, point_r in zip(points_l, points_r):
-        disp = point_l[0]-point_r[0]
-        disp_img[int(point_l[1])][int(point_l[0])] = disp
-    points_3d = cv2.reprojectImageTo3D(disp_img, binocular_camera.Q, handleMissingValues=True)
-    return points_3d
-
-class binocular_camera():
+class Binocular_Camera(object):
     
     def __init__(self):
         
@@ -60,7 +29,15 @@ class binocular_camera():
         self.r_type = 0
 
     def Get_Rectify_Maps(self):
-        self.l_map1, self.l_map2, self.r_map1, self.r_map2, self.Q = RectifyMaps(self)
+        self.rec_rvecs_l, self.rec_rvecs_r, self.rec_tvecs_l, self.rec_tvecs_r, self.Q, validPixROI1, validPixROI2 = \
+        cv2.stereoRectify(self.camMat_l, self.dist_l, self.camMat_r, self.dist_r,
+                          self.img_size[:2], self.rvecs, self.tvecs, alpha=0)
+        
+        self.l_map1, self.l_map2 = cv2.initUndistortRectifyMap(self.camMat_l, self.dist_l, self.rec_rvecs_l, self.rec_tvecs_l,
+                                              self.img_size[:2], cv2.CV_16SC2)
+        self.r_map1, self.r_map2 = cv2.initUndistortRectifyMap(self.camMat_r, self.dist_r, self.rec_rvecs_r, self.rec_tvecs_r,
+                                              self.img_size[:2], cv2.CV_16SC2)
+        
         
     def __call__(self, img_l_root, img_r_root, save_root_l, save_root_r):
         self.Get_Rectify_Maps()
@@ -68,7 +45,14 @@ class binocular_camera():
             img_l_dir = os.path.join(img_l_root, img_l_name)
             img_r_dir = os.path.join(img_r_root, img_r_name)
             
-            img_l, img_r = Image_Rectify(self, img_l_dir, img_r_dir)
+            img_l = cv2.imread(img_l_dir, self.l_type)
+            img_r = cv2.imread(img_r_dir, self.r_type)
+
+            img_l = cv2.undistort(img_l, self.camMat_l, self.dist_l)
+            img_r = cv2.undistort(img_r, self.camMat_r, self.dist_r)
+
+            self.rectified_img_l = cv2.remap(img_l, self.l_map1, self.l_map2, cv2.INTER_AREA)
+            self.rectified_img_r = cv2.remap(img_r, self.r_map1, self.r_map2, cv2.INTER_AREA)
             
             cv2.imwrite(os.path.join(save_root_l, img_l_name), img_l)
             cv2.imwrite(os.path.join(save_root_r, img_r_name), img_r)
@@ -78,13 +62,17 @@ class binocular_camera():
         pass
     
     def depth_calc(self, points_l, points_r):
-        points_3d = depth(self, points_l, points_r)
+        disp_img = np.zeros(self.img_size, dtype=np.float32)
+        for point_l, point_r in zip(points_l, points_r):
+            disp = point_l[0]-point_r[0]
+            disp_img[int(point_l[1])][int(point_l[0])] = disp
+        points_3d = cv2.reprojectImageTo3D(disp_img, self.Q, handleMissingValues=True)
         return points_3d
     
 if __name__ == '__main__': 
-    cas = binocular_camera()
-    cas(img_l_root=r"D:\Filea\miceie\projects\Stereo_vision_lure\trial\example\left", 
-        img_r_root=r"D:\Filea\miceie\projects\Stereo_vision_lure\trial\example\right", 
-        save_root_l=r"D:\Filea\miceie\projects\Stereo_vision_lure\rectified\left", 
-        save_root_r=r"D:\Filea\miceie\projects\Stereo_vision_lure\rectified\right")
+    cas = Binocular_Camera()
+    cas(img_l_root=r"F:\Filea\miceie\projects\Stereo_vision_lure\calibration\example\left", 
+        img_r_root=r"F:\Filea\miceie\projects\Stereo_vision_lure\calibration\example\right", 
+        save_root_l=r"F:\Filea\miceie\projects\Stereo_vision_lure\rectified\left", 
+        save_root_r=r"F:\Filea\miceie\projects\Stereo_vision_lure\rectified\right")
     print(cas.Q)
