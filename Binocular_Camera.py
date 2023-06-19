@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import os
-from modules.StereoCalibration import stereocalibrate
+from functions.StereoCalibration import stereocalibrate
 
 
 class binocular_camera(object): 
